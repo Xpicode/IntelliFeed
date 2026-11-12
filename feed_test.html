@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>IntelliFeed - Feed Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        button {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            margin: 10px;
+            border-radius: 10px;
+            border: none;
+        }
+
+        .btn-test {
+            background: #10B981;
+            color: white;
+        }
+
+        .btn-test2 {
+            background: #3B82F6;
+            color: white;
+        }
+
+        .btn-test3 {
+            background: #F59E0B;
+            color: white;
+        }
+
+        #log {
+            background: white;
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 10px;
+            min-height: 200px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            white-space: pre-wrap;
+        }
+
+        .ok {
+            color: green;
+        }
+
+        .err {
+            color: red;
+        }
+
+        .info {
+            color: blue;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>🔧 IntelliFeed Feed Command Test</h2>
+    <p>I-click ang buttons para ma-test ang bawat bahagi ng system.</p>
+
+    <button class="btn-test" onclick="testPHP()">1. Test PHP Connection</button>
+    <button class="btn-test2" onclick="testFeedCommand()">2. Test Feed Command</button>
+    <button class="btn-test3" onclick="checkDatabase()">3. Check Database</button>
+    <button onclick="clearLog()" style="background:#EF4444;color:white;">Clear Log</button>
+
+    <div id="log">Log output will appear here...\n</div>
+
+    <script>
+        // ← BAGUHIN ITO SA TAMANG IP MO
+        const API = 'http://192.168.0.33/IntelliFeed/api/';
+
+        function log(msg, type = 'info') {
+            const el = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            el.innerHTML += `<span class="${type}">[${time}] ${msg}</span>\n`;
+            el.scrollTop = el.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // TEST 1: Check if PHP is reachable at all
+        async function testPHP() {
+            log('Testing PHP connection...', 'info');
+            try {
+                const r = await fetch(API + 'get_arduino_status.php');
+                log('HTTP Status: ' + r.status, r.ok ? 'ok' : 'err');
+                const text = await r.text();
+                log('Raw response (first 200 chars):\n' + text.substring(0, 200), 'info');
+            } catch (e) {
+                log('FETCH ERROR: ' + e.toString(), 'err');
+                log('→ Possible causes: wrong IP, server down, CORS blocked', 'err');
+            }
+        }
+
+        // TEST 2: Send actual feed command
+        async function testFeedCommand() {
+            log('\nSending feed command...', 'info');
+            log('URL: ' + API + 'send_feeding_command.php', 'info');
+
+            const payload = {
+                command: 'feed_now',
+                plate_type: 'new',
+                portion: 30
+            };
+            log('Payload: ' + JSON.stringify(payload), 'info');
+
+            try {
+                const r = await fetch(API + 'send_feeding_command.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+
+                log('HTTP Status: ' + r.status, r.ok ? 'ok' : 'err');
+
+                const text = await r.text();
+                log('Raw PHP response:\n' + text, 'info');
+
+                try {
+                    const json = JSON.parse(text);
+                    if (json.success) {
+                        log('✅ SUCCESS! command_id=' + json.command_id + ' history_id=' + json.history_id, 'ok');
+                        log('user_id used: ' + json.user_id, 'ok');
+                    } else {
+                        log('❌ PHP returned error: ' + json.message, 'err');
+                    }
+                } catch (e) {
+                    log('❌ Response is NOT valid JSON!', 'err');
+                    log('This means PHP has a syntax error or is outputting HTML error', 'err');
+                }
+
+            } catch (e) {
+                log('❌ NETWORK ERROR: ' + e.toString(), 'err');
+            }
+        }
+
+        // TEST 3: Check if records are being saved
+        async function checkDatabase() {
+            log('\nChecking feeding_history table...', 'info');
+            try {
+                const r = await fetch(API + 'get_feeding_history.php?action=get&range=today', {
+                    credentials: 'include'
+                });
+                const text = await r.text();
+                log('Raw response:\n' + text.substring(0, 500), 'info');
+
+                try {
+                    const json = JSON.parse(text);
+                    if (json.success) {
+                        log('✅ Records found: ' + (json.history?.length || 0), 'ok');
+                        log('Stats: ' + JSON.stringify(json.stats), 'ok');
+                    } else {
+                        log('❌ Error: ' + json.message, 'err');
+                    }
+                } catch (e) {
+                    log('❌ Not valid JSON', 'err');
+                }
+            } catch (e) {
+                log('❌ Network error: ' + e.toString(), 'err');
+            }
+        }
+
+        log('Test page ready. Click buttons above to diagnose.', 'ok');
+    </script>
+
+</body>
+
+</html>

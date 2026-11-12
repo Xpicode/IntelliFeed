@@ -1,0 +1,13 @@
+# Python environment and model weights (re-creatable / too large)
+venv/
+__pycache__/
+*.pt
+
+# Runtime logs
+*.log
+debug_log.txt
+
+# Raw MySQL table files (use the .sql dump instead)
+*.frm
+*.ibd
+db.opt
