@@ -1431,6 +1431,8 @@ $petCount = $stmt->fetch()['count'];
 }
 
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="theme.css">
 </head>
 <body data-theme="light">
 <div class="gradient-bg">
@@ -3381,5 +3383,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (disposeAndFeedBtn) disposeAndFeedBtn.addEventListener('click', disposeAndFeedNew); 
 });
 </script>
+<script src="motion.js"></script>
 </body>
 </html>
