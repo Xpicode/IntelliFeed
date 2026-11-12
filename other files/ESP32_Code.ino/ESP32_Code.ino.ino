@@ -20,6 +20,9 @@ const char* feedingCommandUrl = "http://10.137.170.60/IntelliFeed/api/get_feedin
 const char* scheduleUrl       = "http://10.137.170.60/IntelliFeed/api/check_schedule.php";
 const char* feedCompleteUrl   = "http://10.137.170.60/IntelliFeed/api/log_feed_complete.php";
 
+// Must match 'device_key' in api/config.php on the server
+const char* deviceKey = "change-me";
+
 // id of the web command that started the current feed (0 = physical button)
 long lastFeedCommandId = 0;
 
@@ -192,6 +195,7 @@ void sendDataToWeb() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin(arduinoDataUrl);
+  http.addHeader("X-Device-Key", deviceKey);
   applyHttpTimeout(http);
   http.addHeader("Content-Type", "application/json");
 
@@ -224,6 +228,7 @@ void logFeedComplete(float dispensedGrams) {
   if (WiFi.status() != WL_CONNECTED || dispensedGrams <= 0) return;
   HTTPClient http;
   http.begin(feedCompleteUrl);
+  http.addHeader("X-Device-Key", deviceKey);
   http.setTimeout(5000);
   http.addHeader("Content-Type", "application/json");
   StaticJsonDocument<128> doc;
@@ -334,6 +339,7 @@ void checkWebCommands() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin(feedingCommandUrl);
+  http.addHeader("X-Device-Key", deviceKey);
   applyHttpTimeout(http);
   int code = http.GET();
   String response = (code > 0) ? http.getString() : "";
@@ -419,6 +425,7 @@ void checkSchedule() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin(scheduleUrl);
+  http.addHeader("X-Device-Key", deviceKey);
   applyHttpTimeout(http);
   int code = http.GET();
   if (code > 0) {

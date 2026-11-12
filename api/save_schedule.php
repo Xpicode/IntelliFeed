@@ -107,6 +107,6 @@ try {
     echo json_encode(['success' => false, 'message' => 'Unknown action']);
 
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => dbError($e)]);
 }
 ?>

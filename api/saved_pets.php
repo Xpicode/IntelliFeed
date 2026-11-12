@@ -56,7 +56,7 @@ if ($action === 'save') {
             echo json_encode(['success' => true, 'message' => 'Pet saved!']);
         }
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }
@@ -73,7 +73,7 @@ if ($action === 'get') {
         // Make sure we're outputting only JSON
         echo json_encode(['success' => true, 'pets' => $pets]);
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }
@@ -94,7 +94,7 @@ if ($action === 'delete') {
         $stmt->execute([$userId, $petId]);
         echo json_encode(['success' => true, 'message' => 'Pet deleted']);
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }

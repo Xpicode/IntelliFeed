@@ -7,9 +7,9 @@
 // Cleanup runs once per request with a 1% probability to avoid overhead.
 
 require_once 'db_connect.php';
+requireDeviceKey();
 
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
 ini_set('display_errors', 0);
 error_reporting(0);
 
@@ -66,6 +66,6 @@ try {
     }
 
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => dbError($e)]);
 }
 ?>

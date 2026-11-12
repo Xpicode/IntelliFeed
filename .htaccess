@@ -1,0 +1,11 @@
+# Session cookie: not readable by scripts, not sent on cross-site requests
+<IfModule php_module>
+    php_flag  session.cookie_httponly on
+    php_value session.cookie_samesite Lax
+</IfModule>
+
+# Files that live in the project folder but must never be downloadable
+<FilesMatch "(\.(sql|log|py|pt|bat|yml|frm|ibd|opt|ino|code-workspace)|^debug_log\.txt|^config(\.example)?\.php)$">
+    Require all denied
+</FilesMatch>
+RedirectMatch 404 "/(\.git|venv|other files)(/|$)"

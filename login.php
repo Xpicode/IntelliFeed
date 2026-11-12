@@ -37,6 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'Logged in successfully from ' . ($_SERVER['HTTP_USER_AGENT'] ?? 'Unknown device')
                 );
                 
+                // New session id on login, so a pre-login id cannot be reused
+                session_regenerate_id(true);
+
                 // Set session variables
                 $_SESSION['user_id'] = $user['id'];
                 $_SESSION['username'] = $user['username'];
@@ -77,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $error = 'Invalid username or password';
             }
         } catch (PDOException $e) {
-            $error = 'Database error: ' . $e->getMessage();
+            $error = 'Something went wrong. Please try again.';
             error_log("Login error: " . $e->getMessage());
         }
     }

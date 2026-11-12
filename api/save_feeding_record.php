@@ -5,9 +5,6 @@
 
 session_start();
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200); exit;
@@ -37,19 +34,7 @@ if (!$data) {
     exit;
 }
 
-// ── Get user_id: session first, fallback to POST body ─────
-$userId = null;
-if (isset($_SESSION['user_id'])) {
-    $userId = (int)$_SESSION['user_id'];
-    debugLog("user_id from SESSION: $userId");
-} elseif (isset($data['user_id'])) {
-    $userId = (int)$data['user_id'];
-    debugLog("user_id from POST body: $userId");
-} else {
-    debugLog("ERROR: No user_id found anywhere");
-    echo json_encode(['success' => false, 'message' => 'Not authenticated - no user_id']);
-    exit;
-}
+$userId = requireLogin();
 
 $action      = $data['action']       ?? 'save';
 $plateType   = $data['plate_type']   ?? 'stock';
@@ -101,6 +86,6 @@ try {
 
 } catch (PDOException $e) {
     debugLog("PDOException: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => dbError($e)]);
 }
 ?>

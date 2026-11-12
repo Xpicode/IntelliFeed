@@ -1,8 +1,5 @@
 <?php
 header('ngrok-skip-browser-warning: true');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     http_response_code(200);
@@ -18,8 +15,7 @@ error_reporting(0);
 date_default_timezone_set('Asia/Manila');
 $pdo->exec("SET time_zone = '+08:00'");
 
-session_start();
-$userId = $_SESSION['user_id'] ?? null;
+$userId = requireLogin();
 
 try {
     $stmt = $pdo->query("SELECT * FROM arduino_status ORDER BY timestamp DESC LIMIT 1");
@@ -97,6 +93,6 @@ try {
     ]);
 
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage(), 'device_connected' => false]);
+    echo json_encode(['success' => false, 'error' => dbError($e), 'device_connected' => false]);
 }
 ?>

@@ -2,9 +2,6 @@
 // api/arduino_data.php
 // UPDATED: May validation at debug logs
 header('ngrok-skip-browser-warning: true');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
 
 if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
     http_response_code(200);
@@ -12,6 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
 }
 
 require_once 'db_connect.php';
+requireDeviceKey();
 
 header('Content-Type: application/json');
 ini_set('display_errors', 0);
@@ -199,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $data) {
         error_log("Database error in arduino_data.php: " . $e->getMessage());
         echo json_encode([
             'error' => 'Database error', 
-            'message' => $e->getMessage(),
+            'message' => dbError($e),
             'status' => 'error'
         ]);
     }

@@ -6,9 +6,9 @@
 // 3. Timezone fixed (from db_connect.php)
 
 require_once 'db_connect.php';
+requireDeviceKey();
 
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
 ini_set('display_errors', 0);
 
 try {
@@ -80,6 +80,6 @@ try {
     }
 
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => dbError($e)]);
 }
 ?>

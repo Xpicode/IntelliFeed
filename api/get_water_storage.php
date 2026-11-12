@@ -1,6 +1,7 @@
 <?php
 // api/get_water_storage.php
 require_once 'db_connect.php';
+requireLogin();
 
 header('Content-Type: application/json');
 
@@ -36,7 +37,7 @@ try {
 } catch (PDOException $e) {
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage()
+        'error' => dbError($e)
     ]);
 }
 ?>

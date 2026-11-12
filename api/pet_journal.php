@@ -75,7 +75,7 @@ if ($action === 'add') {
         if ($e->errorInfo[1] == 3819) {
             echo json_encode(['success' => false, 'message' => 'Note exceeds 500 characters']);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+            echo json_encode(['success' => false, 'message' => dbError($e)]);
         }
     }
     exit;
@@ -98,7 +98,7 @@ if ($action === 'get_all') {
         echo json_encode(['success' => true, 'entries' => $entries]);
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }
@@ -129,7 +129,7 @@ if ($action === 'get_all_with_deleted') {
         echo json_encode(['success' => true, 'entries' => $entries]);
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }
@@ -166,7 +166,7 @@ if ($action === 'delete') {
         }
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }
@@ -199,7 +199,7 @@ if ($action === 'permanent_delete') {
         }
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }
@@ -236,7 +236,7 @@ if ($action === 'restore') {
         }
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }
@@ -284,7 +284,7 @@ if ($action === 'update') {
         if ($e->errorInfo[1] == 3819) {
             echo json_encode(['success' => false, 'message' => 'Note exceeds 500 characters']);
         } else {
-            echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+            echo json_encode(['success' => false, 'message' => dbError($e)]);
         }
     }
     exit;
@@ -307,7 +307,7 @@ if ($action === 'get_trash') {
         echo json_encode(['success' => true, 'entries' => $entries]);
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }
@@ -334,7 +334,7 @@ if ($action === 'empty_trash') {
         echo json_encode(['success' => true, 'message' => "Trash emptied, $count entries permanently deleted"]);
         
     } catch (PDOException $e) {
-        echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => dbError($e)]);
     }
     exit;
 }

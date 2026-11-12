@@ -8,6 +8,7 @@
 // command_id = id from get_feeding_command.php, or 0 for a physical-button feed.
 
 require_once 'db_connect.php';
+requireDeviceKey();
 
 header('Content-Type: application/json');
 ini_set('display_errors', 0);
@@ -72,6 +73,6 @@ try {
     ]);
 
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => dbError($e)]);
 }
 ?>

@@ -11,3 +11,6 @@ debug_log.txt
 *.frm
 *.ibd
 db.opt
+
+# Local secrets (copy api/config.example.php to api/config.php)
+api/config.php

@@ -3,9 +3,6 @@
 // Saves the last-used WiFi SSID and API base URL to DB for reference.
 // Does NOT store the password server-side.
 
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
 header('Content-Type: application/json');
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -64,6 +61,6 @@ try {
     echo json_encode(['success' => true, 'message' => 'Config saved']);
 
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => dbError($e)]);
 }
 ?>

@@ -28,6 +28,6 @@ try {
     ]);
 
 } catch (PDOException $e) {
-    echo json_encode(['success' => false, 'message' => 'DB error: ' . $e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => dbError($e)]);
 }
 ?>
