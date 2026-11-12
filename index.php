@@ -1644,7 +1644,7 @@ let _lastKnownWeight = 0;
 let activityLogEntries = [];
 let currentLogFilter = 'all';
 let scheduleLastTrigger = [null, null, null];
-let scheduleCheckInterval = null;
+
 let isEditingSchedule = false;
 let currentScheduleId = null;
 let editingSlotIndex = null;
@@ -3094,35 +3094,6 @@ function sendFeedCommand(plateType, portion, isScheduled = false) {
     }); 
 }
 
-function startScheduleChecker() {
-    if (scheduleCheckInterval) clearInterval(scheduleCheckInterval);
-    scheduleCheckInterval = setInterval(() => {
-        const now = new Date();
-        const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-        
-        for (let i = 0; i < slotData.length; i++) {
-            const schedule = slotData[i];
-            if (!schedule || schedule.is_active != 1) continue;
-            
-            const scheduleTime = schedule.schedule_time;
-            if (scheduleTime === currentTime) {
-                const lastTrigger = scheduleLastTrigger[i];
-                if (!lastTrigger || (now - new Date(lastTrigger)) > 60000) {
-                    scheduleLastTrigger[i] = now;
-                    const mealNames = ['Breakfast', 'Lunch', 'Dinner'];
-                    addSystemEvent(`⏰ SCHEDULE TRIGGERED: ${mealNames[i]} time! Adding ${schedule.portion}g to plate...`, 'success');
-                    // FIXED: Use 'stock' with true flag para hindi mag-dispose
-                    sendFeedCommand('stock', schedule.portion, true);
-                    
-                    if (currentPanel === 'schedule') {
-                        renderScheduleList();
-                    }
-                }
-            }
-        }
-    }, 1000);
-}
-
 function closePlateModal() { document.getElementById('plateModal').style.display = 'none'; selectedPlateType = null; }
 function selectPlate(type) { selectedPlateType = type; document.getElementById('stockCard').classList.toggle('selected', type === 'stock'); document.getElementById('newCard').classList.toggle('selected', type === 'new'); const portion = document.getElementById('portionSlider').value; document.getElementById('confirmPortion').textContent = portion + 'g'; document.getElementById('selectedPlateLabel').textContent = type === 'new' ? '🍽️ New Plate' : '🫙 Stock Plate'; document.getElementById('plateConfirmRow').style.display = 'block'; }
 
@@ -3240,7 +3211,7 @@ async function loadSchedules() {
         const data = await r.json(); 
         slotData = [null, null, null]; 
         if (data.success && data.schedules) data.schedules.forEach(s => { 
-            if (s.slot_index >= 0 && s.slot_index <= 2) slotData[s.slot_index] = s; 
+            if (s.slot_index >= 0 && s.slot_index <= 2) { slotData[s.slot_index] = s; scheduleLastTrigger[s.slot_index] = s.last_triggered || null; } 
         }); 
         if (currentPanel === 'schedule') { 
             renderScheduleList(); 
@@ -3398,7 +3369,6 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(fetchArduinoStatus, 5000); 
     loadSchedules(); 
     setInterval(loadSchedules, 60000); 
-    startScheduleChecker(); 
     addSystemEvent('🚀 IntelliFeed dashboard initialized and ready', 'success', true); 
     renderLiveStatusPanel(); 
     currentPanel = 'liveStatus'; 

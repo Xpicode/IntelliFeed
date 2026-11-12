@@ -19,10 +19,19 @@ try {
     if (rand(1, 100) === 1) {
         $pdo->exec("
             DELETE FROM feeding_commands
-            WHERE executed = 1
+            WHERE executed <> 0
               AND executed_at < NOW() - INTERVAL 7 DAY
         ");
     }
+
+    // Expire commands the device never picked up (e.g. it was offline), so a
+    // stale feed does not run hours later. executed = 2 means "expired".
+    $pdo->exec("
+        UPDATE feeding_commands
+        SET executed = 2, executed_at = NOW()
+        WHERE executed = 0
+          AND created_at < NOW() - INTERVAL 2 MINUTE
+    ");
 
     // Get oldest unexecuted command
     $stmt = $pdo->prepare("

@@ -10,7 +10,7 @@ const CONFIG = {
 };
 
 // API URL for database
-const API_URL = 'http://localhost/IntelliFeed/api/saved_pets.php';
+const API_URL = 'api/saved_pets.php';
 
 // ========== DOM ELEMENTS ==========
 const elements = {

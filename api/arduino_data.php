@@ -39,6 +39,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $data) {
     $noPlate        = (bool)($data['no_plate']           ?? false);
     $plateInside    = (bool)($data['plate_inside']       ?? false);
     $plateDist      = (float)($data['plate_distance']    ?? 0);
+    $plateIdleWarn  = (bool)($data['plate_idle_warn']    ?? false);
+    $plateTimeout   = (bool)($data['plate_timeout']      ?? false);
+    $plateOut       = (bool)($data['plate_out']          ?? false);
+    $plateMov       = (bool)($data['plate_mov']          ?? false);
     
     // Validate water storage data
     $wstoragePct    = (float)($data['wstorage_pct']      ?? 0);
@@ -94,8 +98,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $data) {
                 (device_id, weight, water_weight, feeding, food_empty,
                  no_plate, plate_inside, plate_distance,
                  wstorage_pct, wstorage_level_cm, wstorage_low,
+                 plate_idle_warn, plate_timeout, plate_out, plate_mov,
                  timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ON DUPLICATE KEY UPDATE
                 weight            = VALUES(weight),
                 water_weight      = VALUES(water_weight),
@@ -107,6 +112,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $data) {
                 wstorage_pct      = VALUES(wstorage_pct),
                 wstorage_level_cm = VALUES(wstorage_level_cm),
                 wstorage_low      = VALUES(wstorage_low),
+                plate_idle_warn   = VALUES(plate_idle_warn),
+                plate_timeout     = VALUES(plate_timeout),
+                plate_out         = VALUES(plate_out),
+                plate_mov         = VALUES(plate_mov),
                 timestamp         = VALUES(timestamp)
         ");
         
@@ -121,7 +130,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $data) {
             $plateDist,
             $wstoragePct, 
             $wstorageLvlCm, 
-            $wstorageLow ? 1 : 0
+            $wstorageLow ? 1 : 0,
+            $plateIdleWarn ? 1 : 0,
+            $plateTimeout ? 1 : 0,
+            $plateOut ? 1 : 0,
+            $plateMov ? 1 : 0
         ]);
         
         if (!$result) {

@@ -52,11 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $newUserId = $pdo->lastInsertId();
                     
                     // Log the registration
-                    $logStmt = $pdo->prepare("
-                        INSERT INTO activity_logs (user_id, username, action, status, details, ip_address) 
-                        VALUES (?, ?, 'register', 'success', 'New account created', ?)
-                    ");
-                    $logStmt->execute([$newUserId, $username, $_SERVER['REMOTE_ADDR']]);
+                    logUserActivity($newUserId, $username, 'register', 'success', 'New account created');
                     
                     $success = 'Registration successful! You can now login.';
                 } else {
