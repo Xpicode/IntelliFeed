@@ -17,8 +17,7 @@ $pdo->exec("SET time_zone = '+08:00'");
 
 // ── Debug log inside api/ folder for easy access ──────────
 function debugLog($msg) {
-    $logFile = __DIR__ . '/save_feeding_debug.log';
-    file_put_contents($logFile, date('Y-m-d H:i:s') . ' | ' . $msg . "\n", FILE_APPEND);
+    error_log('save_feeding_record: ' . $msg);
 }
 
 $input = file_get_contents('php://input');

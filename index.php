@@ -1614,7 +1614,6 @@ $petCount = $stmt->fetch()['count'];
 </div>
 
 <script>
-const ESP32_BASE = 'http://10.213.15.60';
 const API_URL = 'api/';
 const SCHED_API = API_URL + 'save_schedule.php';
 const JOURNAL_API_URL = API_URL + 'pet_journal.php';
@@ -2914,8 +2913,8 @@ function updateCurrentValues() {
 }
 
 function tareScale() { 
-    fetch(ESP32_BASE + '/tare').then(() => { 
-        addSystemEvent('⚖️ Scale tared successfully', 'success'); 
+    fetch(API_URL + 'send_dispose_command.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'tare' }), credentials: 'include' }).then(() => { 
+        addSystemEvent('⚖️ Tare command sent', 'success'); 
     }).catch(() => addSystemEvent('❌ Tare command failed! Check Arduino connection.', 'error')); 
 }
 

@@ -16,7 +16,7 @@ ini_set('display_errors', 0);
 error_reporting(0);
 
 define('KEEP_HISTORY', true);
-define('DEBUG_MODE', true); // Set to false in production
+define('DEBUG_MODE', false); // Set to false in production
 
 $input = file_get_contents('php://input');
 $data  = json_decode($input, true);
@@ -67,29 +67,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $data) {
     }
 
     try {
-        // First, check if arduino_status table exists and has correct structure
-        $checkTable = $pdo->query("SHOW TABLES LIKE 'arduino_status'");
-        if ($checkTable->rowCount() == 0) {
-            // Create table if not exists
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS arduino_status (
-                    device_id VARCHAR(50) PRIMARY KEY,
-                    weight FLOAT DEFAULT 0,
-                    water_weight FLOAT DEFAULT 0,
-                    feeding TINYINT DEFAULT 0,
-                    food_empty TINYINT DEFAULT 0,
-                    no_plate TINYINT DEFAULT 0,
-                    plate_inside TINYINT DEFAULT 0,
-                    plate_distance FLOAT DEFAULT 0,
-                    wstorage_pct FLOAT DEFAULT 0,
-                    wstorage_level_cm FLOAT DEFAULT 0,
-                    wstorage_low TINYINT DEFAULT 0,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                )
-            ");
-            error_log("Created arduino_status table");
-        }
-        
         // Update or insert into arduino_status
         $stmt = $pdo->prepare("
             INSERT INTO arduino_status
@@ -145,31 +122,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $data) {
 
         // Save to history if enabled
         if (KEEP_HISTORY) {
-            // Check if arduino_data table exists
-            $checkHistory = $pdo->query("SHOW TABLES LIKE 'arduino_data'");
-            if ($checkHistory->rowCount() == 0) {
-                // Create history table if not exists
-                $pdo->exec("
-                    CREATE TABLE IF NOT EXISTS arduino_data (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        device_id VARCHAR(50),
-                        weight FLOAT,
-                        water_weight FLOAT,
-                        feeding TINYINT,
-                        food_empty TINYINT,
-                        no_plate TINYINT,
-                        plate_inside TINYINT,
-                        plate_distance FLOAT,
-                        wstorage_pct FLOAT,
-                        wstorage_level_cm FLOAT,
-                        wstorage_low TINYINT,
-                        timestamp DATETIME,
-                        INDEX idx_device_timestamp (device_id, timestamp)
-                    )
-                ");
-                error_log("Created arduino_data table");
-            }
-            
             $stmtHistory = $pdo->prepare("
                 INSERT INTO arduino_data
                     (device_id, weight, water_weight, feeding, food_empty,
@@ -186,8 +138,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $data) {
                 $wstoragePct, $wstorageLvlCm, $wstorageLow ? 1 : 0
             ]);
             
-            if (DEBUG_MODE) {
-                error_log("History record saved");
+            // Keep 48 hours of history. Runs on roughly 1 request in 500
+            // (replaces the old intellifeed_cleanup.bat scheduled task).
+            if (random_int(1, 500) === 1) {
+                $pdo->exec("DELETE FROM arduino_data WHERE timestamp < NOW() - INTERVAL 48 HOUR");
             }
         }
 

@@ -43,27 +43,6 @@ if ($portion < 10 || $portion > 1000) $portion = 30;
 $userId = requireLogin();
 
 try {
-    // 1. Ensure feeding_commands table exists with is_scheduled column
-    $pdo->exec("CREATE TABLE IF NOT EXISTS `feeding_commands` (
-        `id`           INT AUTO_INCREMENT PRIMARY KEY,
-        `user_id`      INT NOT NULL DEFAULT 1,
-        `device_id`    VARCHAR(50) DEFAULT 'esp32_main',
-        `command`      VARCHAR(50) NOT NULL,
-        `plate_type`   VARCHAR(20) DEFAULT 'stock',
-        `portion`      FLOAT DEFAULT 30,
-        `is_scheduled` TINYINT DEFAULT 0,
-        `executed`     TINYINT DEFAULT 0,
-        `executed_at`  DATETIME DEFAULT NULL,
-        `created_at`   DATETIME DEFAULT CURRENT_TIMESTAMP
-    )");
-
-    // Check if is_scheduled column exists, if not add it
-    try {
-        $pdo->exec("ALTER TABLE `feeding_commands` ADD COLUMN `is_scheduled` TINYINT DEFAULT 0 AFTER `portion`");
-    } catch (PDOException $e) {
-        // Column already exists, ignore error
-    }
-
     // 2. Insert command for ESP32 with is_scheduled flag
     $stmt = $pdo->prepare("
         INSERT INTO `feeding_commands`
@@ -84,14 +63,6 @@ try {
     
     // Optional: Save to activity log table if exists
     try {
-        $pdo->exec("CREATE TABLE IF NOT EXISTS `activity_logs` (
-            `id`         INT AUTO_INCREMENT PRIMARY KEY,
-            `user_id`    INT DEFAULT 1,
-            `action`     VARCHAR(100),
-            `details`    TEXT,
-            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
-        )");
-        
         $log = $pdo->prepare("INSERT INTO `activity_logs` (`user_id`, `action`, `details`) VALUES (?, 'feeding_command', ?)");
         $log->execute([$userId, $logMsg]);
     } catch (Exception $e) {

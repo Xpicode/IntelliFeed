@@ -10,18 +10,21 @@
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 
-// WiFi
-const char* ssid = "kian1"; 
+// ═══════════════ SETTINGS - edit these, nothing else ═══════════════
+const char* ssid     = "kian1";
 const char* password = "kian12345";
 
-// API URLs
-const char* arduinoDataUrl    = "http://10.137.170.60/IntelliFeed/api/arduino_data.php";
-const char* feedingCommandUrl = "http://10.137.170.60/IntelliFeed/api/get_feeding_command.php";
-const char* scheduleUrl       = "http://10.137.170.60/IntelliFeed/api/check_schedule.php";
-const char* feedCompleteUrl   = "http://10.137.170.60/IntelliFeed/api/log_feed_complete.php";
+// The PC running XAMPP (run `ipconfig` there). Keep the trailing slash.
+#define SERVER "http://10.137.170.60/IntelliFeed/api/"
 
 // Must match 'device_key' in api/config.php on the server
 const char* deviceKey = "change-me";
+// ════════════════════════════════════════════════════════════════════
+
+const char* arduinoDataUrl    = SERVER "arduino_data.php";
+const char* feedingCommandUrl = SERVER "get_feeding_command.php";
+const char* scheduleUrl       = SERVER "check_schedule.php";
+const char* feedCompleteUrl   = SERVER "log_feed_complete.php";
 
 // id of the web command that started the current feed (0 = physical button)
 long lastFeedCommandId = 0;

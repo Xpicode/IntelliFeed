@@ -16,7 +16,7 @@ $data  = json_decode($input, true);
 // dispose       = plate nasa labas (papasok muna)
 // dispose_in    = plate nasa loob na (direct dispose)
 $command = $data['command'] ?? 'dispose';
-if (!in_array($command, ['dispose', 'dispose_in'])) {
+if (!in_array($command, ['dispose', 'dispose_in', 'tare'])) {
     $command = 'dispose';
 }
 
