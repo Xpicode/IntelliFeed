@@ -57,12 +57,21 @@ bool waterScaleConnected = false;
 #define TXD2 17
 
 // Water plate auto pump
-#define WATER_LOW_GRAMS   85.0
-#define WATER_TARGET_GRAMS 85.0
+#define WATER_LOW_GRAMS    60.0   // start refilling below this
+#define WATER_TARGET_GRAMS 85.0   // stop refilling at this (the gap prevents on/off chatter)
 bool  autoPumping        = false;
 bool  manualPumping      = false;
 unsigned long pumpStartTime = 0;
 const unsigned long maxPumpTime = 30000UL;
+unsigned long pumpDurationMs = maxPumpTime;   // limit for the current pump run
+
+// How long to wait for the Uno to finish a servo move before giving up
+#define DISPOSE_WAIT_MS  25000UL   // plate in (6s) + dispose (8s) + margin
+#define PLATE_IN_WAIT_MS 12000UL   // plate in takes about 6s
+
+// 1 = brownout detector off (original behaviour). Set to 0 once the power supply
+// is solid: with it off, voltage dips cause silent glitches instead of a clean reset.
+#define DISABLE_BROWNOUT_DETECTOR 1
 
 // State
 float currentWeight  = 0.0;
@@ -154,7 +163,7 @@ void readWaterWeight() {
   bool isPumping = autoPumping || manualPumping;
   if (isPumping) {
     bool targetReached  = (waterWeight >= WATER_TARGET_GRAMS);
-    bool timedOut       = (millis() - pumpStartTime >= maxPumpTime);
+    bool timedOut       = (millis() - pumpStartTime >= pumpDurationMs);
     if (targetReached || timedOut) {
       Serial2.println("PUMP:0");
       if (autoPumping) {
@@ -170,17 +179,20 @@ void readWaterWeight() {
     if (waterWeight < WATER_LOW_GRAMS && !isFeeding && waterScaleConnected && wStoragePct > 20.0) {
       autoPumping  = true;
       pumpStartTime = millis();
+      pumpDurationMs = maxPumpTime;
       Serial2.println("PUMP:30");
       Serial.printf("[AUTO PUMP] Started — water low (%.1fg)\n", waterWeight);
     }
   }
 }
 
+void applyHttpTimeout(HTTPClient& http);
+
 void sendDataToWeb() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin(arduinoDataUrl);
-  http.setTimeout(5000);
+  applyHttpTimeout(http);
   http.addHeader("Content-Type", "application/json");
 
   StaticJsonDocument<320> doc;
@@ -226,160 +238,188 @@ void logFeedComplete(float dispensedGrams) {
   lastFeedCommandId = 0;
 }
 
-// Function to wait for plate to come inside
-bool waitForPlateIn(unsigned long timeoutMs = 5000) {
-  unsigned long startTime = millis();
-  Serial.println("[PLATE] Waiting for plate to come inside...");
-  
-  while (millis() - startTime < timeoutMs) {
-    if (Serial2.available()) {
+// How long HTTP calls may block. While food is pouring the Uno stops the servo
+// only when it receives WEIGHT updates, so the loop must not stall for long.
+void applyHttpTimeout(HTTPClient& http) {
+  int ms = isFeeding ? 1500 : 5000;
+  http.setConnectTimeout(ms);
+  http.setTimeout(ms);
+}
+
+// Every message the Uno sends is handled here (from loop() and while waiting).
+void handleArduinoMessage(const String& msg) {
+  if (msg.length() == 0) return;
+
+  if (msg == "FOOD_EMPTY") foodEmpty = true;
+  else if (msg == "PLATE_OUTSIDE") {
+    plateInside = false; noPlate = false; plateOut = true;
+    Serial.println("[STATE] Plate is OUTSIDE");
+  }
+  else if (msg == "PLATE_INSIDE") {
+    plateInside = true; noPlate = false; plateOut = false;
+    Serial.println("[STATE] Plate is INSIDE");
+  }
+  else if (msg == "DISPOSE_SKIPPED") { noPlate = true; plateOut = false; }
+  else if (msg == "DISPOSE_COMPLETE") plateOut = false;
+  else if (msg == "AUTO_DISPOSE_COMPLETE") { plateIdleWarn = true; plateOut = false; }
+  else if (msg == "PLATE_IDLE_WARN") plateIdleWarn = true;
+  else if (msg == "PLATE_IN_COMPLETE") {
+    Serial.println("[UNO] Plate return complete");
+    plateOut = false;
+  }
+  else if (msg == "PLATE_DISPENSE_TIMEOUT") {
+    Serial.println("[UNO] Plate dispense timeout!");
+    plateTimeout = true;
+    noPlate = true;
+  }
+  else if (msg == "FEED_STOP_DUE_TO_NO_PLATE" || msg == "FEED_STOP_DUE_TO_NO_FOOD") {
+    isFeeding = false; webFeeding = false; feedingStartTime = 0;
+    Serial.println("[UNO] Feed stopped: " + msg);
+  }
+  else if (msg.startsWith("WSTORAGE:")) {
+    String data = msg.substring(9);
+    int colon = data.indexOf(':');
+    if (colon > 0) {
+      wStoragePct = data.substring(0, colon).toFloat();
+      wStorageLevelCm = data.substring(colon + 1).toFloat();
+      wStorageLow = (wStoragePct <= LOW_LEVEL_PCT);
+    }
+  }
+  else if (msg == "BTN_FEED") {
+    isFeeding = true; webFeeding = true; feedingStartTime = millis(); plateOut = false;
+    plateTimeout = false;
+    lastFeedCommandId = 0;   // physical button feed
+  }
+  else if (msg.startsWith("FEED_COMPLETE:")) {
+    isFeeding = false; webFeeding = false; feedingStartTime = 0; plateIdleWarn = false; plateOut = true;
+    logFeedComplete(msg.substring(14).toFloat());
+  }
+  else if (msg == "FEED_TIMEOUT") { isFeeding = false; webFeeding = false; feedingStartTime = 0; }
+}
+
+// The Uno cannot read serial while its servos move (it sits in delay()), and its
+// receive buffer is only 64 bytes. So after a command that moves a servo we send
+// NOTHING until the Uno reports it is done (or the timeout passes).
+bool waitForArduino(const char* doneA, const char* doneB, unsigned long timeoutMs) {
+  unsigned long start = millis();
+  while (millis() - start < timeoutMs) {
+    while (Serial2.available()) {
       String msg = Serial2.readStringUntil('\n');
       msg.trim();
-      Serial.printf("[PLATE] Received: %s\n", msg.c_str());
-      
-      if (msg == "PLATE_IN_COMPLETE") {
-        Serial.println("[PLATE] ✓ Plate is now inside!");
-        return true;
-      }
+      handleArduinoMessage(msg);
+      if (msg == doneA || (doneB && msg == doneB)) return true;
     }
-    delay(100);
+    // keep the dashboard's "connected" status alive during long moves
+    if (millis() - lastWebSend >= webSendInterval) { sendDataToWeb(); lastWebSend = millis(); }
+    delay(20);
   }
-  
-  Serial.println("[PLATE] ⚠ Timeout waiting for plate to come inside!");
+  Serial.printf("[UNO] Timed out waiting for %s\n", doneA);
   return false;
+}
+
+// Give the Uno a few fresh weight readings before the next command, so it does
+// not decide "plate present" from a reading taken before the plate moved.
+void refreshArduinoWeight() {
+  for (int i = 0; i < 3; i++) { readFoodWeight(); delay(300); }
+}
+
+void sendDispose() {
+  Serial2.println(plateOut ? "PLATE_IN_THEN_DISPOSE" : "DISPOSE");
+  waitForArduino("DISPOSE_COMPLETE", "DISPOSE_SKIPPED", DISPOSE_WAIT_MS);
+  plateInside = false;
+  plateOut    = false;
 }
 
 void checkWebCommands() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin(feedingCommandUrl);
-  http.setTimeout(5000);
+  applyHttpTimeout(http);
   int code = http.GET();
-  if (code > 0) {
-    String response = http.getString();
-    StaticJsonDocument<300> doc;
-    if (!deserializeJson(doc, response)) {
-      if (doc["command"].isNull()) { http.end(); return; }
-      String command = doc["command"].as<String>();
+  String response = (code > 0) ? http.getString() : "";
+  http.end();                       // close before any long wait below
+  if (code <= 0) return;
 
-      if (command == "pump") {
-        if (!autoPumping && !manualPumping) {
-          if (waterWeight >= WATER_TARGET_GRAMS) {
-            Serial.printf("[PUMP] Already at target (%.1fg)\n", waterWeight);
-          } else {
-            manualPumping = true;
-            pumpStartTime = millis();
-            Serial2.println("PUMP:30");
-            Serial.printf("[PUMP] Manual pump started\n");
-          }
-        }
-        http.end(); return;
-      }
+  StaticJsonDocument<384> doc;
+  if (deserializeJson(doc, response) || doc["command"].isNull()) return;
+  String command = doc["command"].as<String>();
+  float  portion = doc["portion"] | 0.0f;
 
-      if (command == "plate_in") {
-        Serial2.println("PLATE_IN_ONLY");
-        Serial.println("[CMD] Plate in only");
-        http.end(); return;
-      }
-
-      if (command == "dispose") {
-        if (plateOut) {
-          Serial2.println("PLATE_IN_THEN_DISPOSE");
-          Serial.println("[CMD] Plate OUT — sending PLATE_IN_THEN_DISPOSE");
-        } else {
-          Serial2.println("DISPOSE");
-          Serial.println("[CMD] DISPOSE sent");
-        }
-        plateInside = false;
-        plateOut    = false;
-        http.end(); return;
-      }
-
-      if (command == "feed_now" && !isFeeding) {
-        String plateType = doc.containsKey("plate_type") ? doc["plate_type"].as<String>() : "stock";
-        float  grams     = doc.containsKey("portion")    ? doc["portion"].as<float>()     : 30.0f;
-        bool   isScheduled = doc.containsKey("is_scheduled") ? doc["is_scheduled"].as<bool>() : false;
-        lastFeedCommandId  = doc["command_id"] | 0L;
-        
-        Serial.println("========================================");
-        Serial.printf("[CMD] FEED COMMAND RECEIVED\n");
-        Serial.printf("[CMD] Type: %s, Portion: %.1fg\n", plateType.c_str(), grams);
-        Serial.printf("[CMD] Is Scheduled: %s\n", isScheduled ? "YES" : "NO");
-        Serial.printf("[CMD] PlateOut status: %s\n", plateOut ? "YES (PLATE IS OUTSIDE)" : "NO (PLATE INSIDE)");
-        Serial.println("========================================");
-        
-        // SCHEDULED FEEDING FIX: Para sa schedule, dapat NEW PLATE at automatic dispose
-        if (plateType == "new" || isScheduled) {
-          // For NEW plate or SCHEDULED feeding - dispose old plate first
-          Serial.println("[CMD] NEW PLATE / SCHEDULED FEEDING - Will dispose old plate first");
-          
-          if (plateOut) {
-            // May plate sa labas - dispose muna
-            Serial.println("[CMD] Plate is outside, sending DISPOSE command...");
-            Serial2.println("PLATE_IN_THEN_DISPOSE");
-            delay(3000); // Give time for disposal
-          } else {
-            // Walang plate or plate inside - just send dispose
-            Serial.println("[CMD] Sending DISPOSE command...");
-            Serial2.println("DISPOSE");
-            delay(2000);
-          }
-          
-          // After disposal, feed with new plate
-          Serial.println("[CMD] Starting scheduled/new plate feed...");
-          isFeeding = true; 
-          webFeeding = true;
-          feedingStartTime = millis();
-          foodEmpty = false; 
-          noPlate = false;
-          plateTimeout = false;
-          Serial2.print("FEED_START:new:");
-          Serial2.println(grams, 1);
-          Serial.printf("[CMD] Schedule feed sent — New Plate %.1fg\n", grams);
-          
-        } else {
-          // STOCK PLATE - existing logic with plate IN check
-          if (plateOut) {
-            Serial.println("[CMD] PLATE IS OUTSIDE!");
-            Serial.println("[CMD] Sending PLATE_IN_ONLY command to Arduino...");
-            Serial2.println("PLATE_IN_ONLY");
-            
-            bool plateInConfirmed = waitForPlateIn(5000);
-            
-            if (plateInConfirmed) {
-              Serial.println("[CMD] ✓ Plate successfully brought inside.");
-              plateOut = false;
-            } else {
-              Serial.println("[CMD] ⚠ Plate IN confirmation timeout! Proceeding anyway...");
-            }
-            delay(500);
-          }
-          
-          isFeeding = true; webFeeding = true;
-          feedingStartTime = millis();
-          foodEmpty = false; noPlate = false;
-          plateTimeout = false;
-          Serial2.print("FEED_START:"); Serial2.print(plateType);
-          Serial2.print(":"); Serial2.println(grams, 1);
-          Serial.printf("[CMD] Feed sent — %s %.1fg\n", plateType.c_str(), grams);
-        }
-        http.end(); return;
-      }
-      else if (command == "feed_stop" && isFeeding) {
-        isFeeding = false; webFeeding = false; feedingStartTime = 0;
-        Serial2.println("FEED_STOP");
-        Serial.println("[CMD] Feed stopped");
-      }
+  if (command == "pump") {
+    // "portion" carries the requested seconds for pump commands
+    if (!autoPumping && !manualPumping && waterWeight < WATER_TARGET_GRAMS) {
+      int secs = constrain((int)portion, 1, 60);
+      manualPumping  = true;
+      pumpStartTime  = millis();
+      pumpDurationMs = secs * 1000UL;
+      Serial2.print("PUMP:"); Serial2.println(secs);
+      Serial.printf("[PUMP] Manual pump started (%ds)\n", secs);
     }
+    return;
   }
-  http.end();
+
+  if (command == "tare") {
+    scale.tare();
+    Serial.println("[CMD] Food scale tared");
+    return;
+  }
+
+  if (command == "plate_in") {
+    Serial2.println("PLATE_IN_ONLY");
+    Serial.println("[CMD] Plate in only");
+    waitForArduino("PLATE_IN_COMPLETE", nullptr, PLATE_IN_WAIT_MS);
+    refreshArduinoWeight();
+    return;
+  }
+
+  if (command == "dispose") {
+    Serial.println("[CMD] Dispose");
+    sendDispose();
+    refreshArduinoWeight();
+    return;
+  }
+
+  if (command == "feed_now" && !isFeeding) {
+    String plateType   = doc["plate_type"] | "stock";
+    float  grams       = portion > 0 ? portion : 30.0f;
+    bool   isScheduled = doc["is_scheduled"] | false;
+    bool   isNew       = (plateType == "new" || isScheduled);
+    lastFeedCommandId  = doc["command_id"] | 0L;
+
+    Serial.printf("[CMD] FEED %s %.1fg scheduled=%d plateOut=%d\n",
+      isNew ? "new" : "stock", grams, isScheduled, plateOut);
+
+    // Step 1: get the old plate out of the way, and WAIT for the Uno to finish.
+    if (isNew) {
+      sendDispose();                       // old plate (if any) is thrown away
+    } else if (plateOut) {
+      Serial2.println("PLATE_IN_ONLY");    // stock plate: just bring it back in
+      waitForArduino("PLATE_IN_COMPLETE", nullptr, PLATE_IN_WAIT_MS);
+      plateOut = false;
+    }
+    refreshArduinoWeight();
+
+    // Step 2: start the feed. The Uno is idle now, so it will receive this.
+    isFeeding = true; webFeeding = true;
+    feedingStartTime = millis();
+    foodEmpty = false; noPlate = false; plateTimeout = false;
+    Serial2.print("FEED_START:"); Serial2.print(isNew ? "new" : "stock");
+    Serial2.print(":"); Serial2.println(grams, 1);
+    return;
+  }
+
+  if (command == "feed_stop" && isFeeding) {
+    isFeeding = false; webFeeding = false; feedingStartTime = 0;
+    Serial2.println("FEED_STOP");
+    Serial.println("[CMD] Feed stopped");
+  }
 }
 
 void checkSchedule() {
   if (WiFi.status() != WL_CONNECTED) return;
   HTTPClient http;
   http.begin(scheduleUrl);
-  http.setTimeout(5000);
+  applyHttpTimeout(http);
   int code = http.GET();
   if (code > 0) {
     String response = http.getString();
@@ -410,7 +450,9 @@ void handleSerialCommands() {
 }
 
 void setup() {
+#if DISABLE_BROWNOUT_DETECTOR
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+#endif
   setCpuFrequencyMhz(80);
 
   Serial.begin(115200);
@@ -461,61 +503,10 @@ void loop() {
     lastWaterRead = millis();
   }
 
-  if (Serial2.available()) {
+  while (Serial2.available()) {
     String msg = Serial2.readStringUntil('\n');
     msg.trim();
-
-    if (msg == "FOOD_EMPTY") foodEmpty = true;
-    else if (msg == "PLATE_OUTSIDE") { 
-      plateInside = false; 
-      noPlate = false; 
-      plateOut = true;
-      Serial.println("[STATE] Plate is OUTSIDE");
-    }
-    else if (msg == "PLATE_INSIDE") { 
-      plateInside = true; 
-      noPlate = false; 
-      plateOut = false;
-      Serial.println("[STATE] Plate is INSIDE");
-    }
-    else if (msg == "DISPOSE_SKIPPED") { noPlate = true; plateOut = false; }
-    else if (msg == "DISPOSE_COMPLETE") plateOut = false;
-    else if (msg == "AUTO_DISPOSE_COMPLETE") { plateIdleWarn = true; plateOut = false; }
-    else if (msg == "PLATE_IDLE_WARN") plateIdleWarn = true;
-    else if (msg == "PLATE_IN_COMPLETE") {
-      Serial.println("[UNO] Plate return complete");
-      plateOut = false;
-    }
-    else if (msg == "PLATE_DISPENSE_TIMEOUT") {
-      Serial.println("[UNO] Plate dispense timeout!");
-      plateTimeout = true;
-      noPlate = true;
-    }
-    else if (msg == "FEED_STOP_DUE_TO_NO_PLATE") {
-      isFeeding = false;
-      webFeeding = false;
-      feedingStartTime = 0;
-      Serial.println("[UNO] Feed stopped due to no plate");
-    }
-    else if (msg.startsWith("WSTORAGE:")) {
-      String data = msg.substring(9);
-      int colon = data.indexOf(':');
-      if (colon > 0) {
-        wStoragePct = data.substring(0, colon).toFloat();
-        wStorageLevelCm = data.substring(colon + 1).toFloat();
-        wStorageLow = (wStoragePct <= LOW_LEVEL_PCT);
-      }
-    }
-    else if (msg == "BTN_FEED") {
-      isFeeding = true; webFeeding = true; feedingStartTime = millis(); plateOut = false;
-      plateTimeout = false;
-      lastFeedCommandId = 0;   // physical button feed
-    }
-    else if (msg.startsWith("FEED_COMPLETE:")) {
-      isFeeding = false; webFeeding = false; feedingStartTime = 0; plateIdleWarn = false; plateOut = true;
-      logFeedComplete(msg.substring(14).toFloat());
-    }
-    else if (msg == "FEED_TIMEOUT") { isFeeding = false; webFeeding = false; feedingStartTime = 0; }
+    handleArduinoMessage(msg);
   }
 
   if (isFeeding && webFeeding && feedingStartTime > 0 && millis() - feedingStartTime > maxFeedTime) {

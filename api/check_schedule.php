@@ -46,17 +46,8 @@ try {
             UPDATE feeding_schedule SET last_triggered = NOW() WHERE id = ?
         ")->execute([$schedule['id']]);
 
-        // ── AUTO DISPOSE — i-insert MUNA bago ang feed command ──
-        // Gagamitin ang DISPOSE (plate nasa labas) bilang default.
-        // Ang ESP32 ay mag-pi-pick up nito first (oldest unexecuted),
-        // tapos ang feed command pagkatapos.
-        $pdo->prepare("
-            INSERT INTO feeding_commands
-                (user_id, device_id, command, plate_type, `portion`, executed)
-            VALUES (?, 'esp32_main', 'dispose', 'stock', 0, 0)
-        ")->execute([$schedule['user_id']]);
-
-        // ── FEED command — isusunod pagkatapos ng dispose ──
+        // The device disposes the old plate itself before a scheduled feed and
+        // waits for that to finish, so no separate dispose command is queued.
         $pdo->prepare("
             INSERT INTO feeding_commands
                 (user_id, device_id, command, plate_type, `portion`, is_scheduled, executed)
@@ -76,7 +67,7 @@ try {
             'plate_type'    => $schedule['plate_type'],
             'portion'       => $schedule['portion'],
             'server_time'   => $timeNow,
-            'auto_dispose'  => true
+            'auto_dispose'  => true   // done by the device
         ]);
     } else {
         echo json_encode([

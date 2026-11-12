@@ -35,7 +35,7 @@ try {
 
     // Get oldest unexecuted command
     $stmt = $pdo->prepare("
-        SELECT id, command, plate_type, `portion`, created_at
+        SELECT id, command, plate_type, `portion`, is_scheduled, created_at
         FROM feeding_commands
         WHERE executed = 0
         ORDER BY created_at ASC
@@ -57,6 +57,7 @@ try {
             'command'    => $command['command'],
             'plate_type' => $command['plate_type'] ?? 'stock',
             'portion'    => (float)($command['portion'] ?? 30),
+            'is_scheduled' => (bool)($command['is_scheduled'] ?? false),
             'command_id' => (int)$command['id'],
             'timestamp'  => $command['created_at']
         ]);

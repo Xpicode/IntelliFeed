@@ -103,6 +103,10 @@ float         weightAtFoodStart = 0.0;
 bool          foodDispenserTimeout = false;
 bool          foodStorageEmpty = false;
 
+// Stop pouring if weight readings stop arriving while the food servo is open
+#define WEIGHT_LOST_MS 5000UL
+unsigned long lastWeightRx = 0;
+
 float waterPlateWeight = 0.0;
 unsigned long lastWaterWeightReceived = 0;
 
@@ -131,6 +135,13 @@ float readUltrasonic(int trigPin, int echoPin, unsigned long timeout) {
   if (dur == 0) return -1;
   float d = dur * 0.01715;
   return (d <= 0 || d > 200) ? -1 : d;
+}
+
+// Servo moves block loop() in delay(). Whatever arrived meanwhile is stale
+// (old weights) or cut off (64-byte buffer), so throw it away.
+void flushRx() {
+  while (Serial.available()) Serial.read();
+  rxLen = 0;
 }
 
 void checkPlateDispenser() {
@@ -177,6 +188,7 @@ void executeDisposeSequence() {
   autoDispDone    = false;
   autoDispWarned  = false;
   dispOff = millis() + DISP_DUR;
+  flushRx();
   Serial.println(F("DISPOSE_COMPLETE"));
   delay(200);
 }
@@ -202,6 +214,7 @@ void bringPlateInside() {
   // Set plateOut to false
   plateOut = false;
   
+  flushRx();
   Serial.println(F("[PLATE] Plate successfully brought inside"));
   Serial.println(F("PLATE_IN_COMPLETE"));  // Send confirmation to ESP32
   
@@ -227,6 +240,7 @@ void startFoodDispensing() {
   weightAtFoodStart = currentG;
   foodOpenedTime = millis();
   foodDispenserStartTime = millis();
+  lastWeightRx = millis();
   foodDispenserTimeout = false;
   foodStorageEmpty = false;
   foodEmptyWarned = false;
@@ -387,6 +401,7 @@ void plateServoOut() {
   plateServo.attach(PLATE_PIN);
   plateServo.write(PLATE_DOWN); delay(PLATE_MOVE_TIME);
   plateServo.detach();
+  flushRx();
   Serial.println(F("[PLATE SERVO] Plate out"));
 }
 
@@ -395,6 +410,7 @@ void plateServoIn() {
   plateServo.write(PLATE_FINAL); delay(PLATE_MOVE_TIME);
   plateServo.write(PLATE_NEUTRAL); delay(PLATE_MOVE_TIME);
   plateServo.detach();
+  flushRx();
   Serial.println(F("[PLATE SERVO] Plate in"));
 }
 
@@ -536,7 +552,6 @@ void processCmd(char* cmd) {
     }
     
     dispOff = millis() + DISP_DUR;
-    Serial.println(F("DISPOSE_COMPLETE"));
     return;
 }
   if (strcmp(cmd, "TEST_DISPOSE") == 0) {
@@ -567,12 +582,12 @@ void processCmd(char* cmd) {
   
   if (strncmp(cmd, "PUMP:", 5) == 0) {
     int secs = atoi(cmd + 5);
-    if (!isWaterPlatePresent()) { return; }
-    if (wStoragePct <= WATER_STORAGE_MIN_PCT) { return; }
     if (secs <= 0) {
       pumpActive = false; digitalWrite(PUMP_PIN, HIGH);
       return;
     }
+    if (!isWaterPlatePresent()) { return; }
+    if (wStoragePct <= WATER_STORAGE_MIN_PCT) { return; }
     if (secs > 120) secs = 120;
     pumpActive = true;
     pumpEndTime = millis() + ((unsigned long)secs * 1000UL);
@@ -628,7 +643,7 @@ void processCmd(char* cmd) {
   if (strcmp(cmd, "FEED_STOP") == 0) { stopFeed(); return; }
   
   if (strncmp(cmd, "WEIGHT:", 7) == 0) {
-    currentG = atof(cmd + 7); lastHB = millis();
+    currentG = atof(cmd + 7); lastHB = millis(); lastWeightRx = millis();
     
     if (plateMov && !plateDispenseTimeout) {
       if (millis() - plateDispenseStartTime >= PLATE_DISPENSE_TIMEOUT_MS) {
@@ -692,6 +707,9 @@ void checkPlateTimeout() {
 
 void checkTimeout() {
   if (!feeding) return;
+  if (foodOpen && millis() - lastWeightRx > WEIGHT_LOST_MS) {
+    stopFeed(); Serial.println(F("FEED_TIMEOUT")); return;
+  }
   if (millis() - feedStart > MAX_FEED) { stopFeed(); Serial.println(F("FEED_TIMEOUT")); }
 }
 
