@@ -89,35 +89,9 @@ try {
     $stmt->execute([$userId, $command, $plateType, $portion, $isScheduled ? 1 : 0]);
     $commandId = $pdo->lastInsertId();
 
-    // 3. Ensure feeding_history table exists with source column
-    $pdo->exec("CREATE TABLE IF NOT EXISTS `feeding_history` (
-        `id`           INT AUTO_INCREMENT PRIMARY KEY,
-        `user_id`      INT NOT NULL DEFAULT 1,
-        `device_id`    VARCHAR(50) DEFAULT 'esp32_main',
-        `plate_type`   VARCHAR(20) DEFAULT 'stock',
-        `portion`      FLOAT DEFAULT 0,
-        `weight_final` FLOAT DEFAULT NULL,
-        `source`       VARCHAR(20) DEFAULT 'manual',
-        `created_at`   DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX `idx_user_date` (`user_id`, `created_at`)
-    )");
-
-    // Check if source column exists, if not add it
-    try {
-        $pdo->exec("ALTER TABLE `feeding_history` ADD COLUMN `source` VARCHAR(20) DEFAULT 'manual' AFTER `weight_final`");
-    } catch (PDOException $e) {
-        // Column already exists, ignore error
-    }
-
-    // 4. Save to feeding_history with source
+    // feeding_history is written by log_feed_complete.php when the device
+    // reports the feed actually finished - not here, where it is only queued.
     $source = $isScheduled ? 'schedule' : 'manual';
-    $hist = $pdo->prepare("
-        INSERT INTO `feeding_history`
-            (`user_id`, `device_id`, `plate_type`, `portion`, `source`, `created_at`)
-        VALUES (?, 'esp32_main', ?, ?, ?, NOW())
-    ");
-    $hist->execute([$userId, $plateType, $portion, $source]);
-    $histId = $pdo->lastInsertId();
 
     // Log the action
     $logMsg = $isScheduled ? 
@@ -144,7 +118,6 @@ try {
         'success'      => true,
         'message'      => $isScheduled ? 'Scheduled feeding command saved' : 'Manual feeding command saved',
         'command_id'   => $commandId,
-        'history_id'   => $histId,
         'plate_type'   => $plateType,
         'portion'      => $portion,
         'user_id'      => $userId,

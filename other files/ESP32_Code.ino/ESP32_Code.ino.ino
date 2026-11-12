@@ -18,6 +18,10 @@ const char* password = "kian12345";
 const char* arduinoDataUrl    = "http://10.137.170.60/IntelliFeed/api/arduino_data.php";
 const char* feedingCommandUrl = "http://10.137.170.60/IntelliFeed/api/get_feeding_command.php";
 const char* scheduleUrl       = "http://10.137.170.60/IntelliFeed/api/check_schedule.php";
+const char* feedCompleteUrl   = "http://10.137.170.60/IntelliFeed/api/log_feed_complete.php";
+
+// id of the web command that started the current feed (0 = physical button)
+long lastFeedCommandId = 0;
 
 // HX711 Food Scale
 #define LOADCELL_DT   18
@@ -203,6 +207,25 @@ void sendDataToWeb() {
   http.end();
 }
 
+// Tell the server a feed really finished, so history shows actual grams
+void logFeedComplete(float dispensedGrams) {
+  if (WiFi.status() != WL_CONNECTED || dispensedGrams <= 0) return;
+  HTTPClient http;
+  http.begin(feedCompleteUrl);
+  http.setTimeout(5000);
+  http.addHeader("Content-Type", "application/json");
+  StaticJsonDocument<128> doc;
+  doc["device_id"]   = "esp32_main";
+  doc["dispensed_g"] = dispensedGrams;
+  doc["command_id"]  = lastFeedCommandId;
+  String body;
+  serializeJson(doc, body);
+  int code = http.POST(body);
+  Serial.printf("[HISTORY] Logged %.1fg (cmd %ld) -> HTTP %d\n", dispensedGrams, lastFeedCommandId, code);
+  http.end();
+  lastFeedCommandId = 0;
+}
+
 // Function to wait for plate to come inside
 bool waitForPlateIn(unsigned long timeoutMs = 5000) {
   unsigned long startTime = millis();
@@ -276,6 +299,7 @@ void checkWebCommands() {
         String plateType = doc.containsKey("plate_type") ? doc["plate_type"].as<String>() : "stock";
         float  grams     = doc.containsKey("portion")    ? doc["portion"].as<float>()     : 30.0f;
         bool   isScheduled = doc.containsKey("is_scheduled") ? doc["is_scheduled"].as<bool>() : false;
+        lastFeedCommandId  = doc["command_id"] | 0L;
         
         Serial.println("========================================");
         Serial.printf("[CMD] FEED COMMAND RECEIVED\n");
@@ -485,9 +509,11 @@ void loop() {
     else if (msg == "BTN_FEED") {
       isFeeding = true; webFeeding = true; feedingStartTime = millis(); plateOut = false;
       plateTimeout = false;
+      lastFeedCommandId = 0;   // physical button feed
     }
     else if (msg.startsWith("FEED_COMPLETE:")) {
       isFeeding = false; webFeeding = false; feedingStartTime = 0; plateIdleWarn = false; plateOut = true;
+      logFeedComplete(msg.substring(14).toFloat());
     }
     else if (msg == "FEED_TIMEOUT") { isFeeding = false; webFeeding = false; feedingStartTime = 0; }
   }

@@ -1,21 +1,11 @@
 <?php
 // api/log_feed_complete.php
-// Called by ESP32 when it receives FEED_COMPLETE from the Arduino.
-// This ensures feeding_history records ACTUAL dispenses, not just queued commands.
+// Called by the ESP32 when the Arduino reports FEED_COMPLETE:<grams>.
+// This is the ONLY place a real feed is written to feeding_history, so history
+// shows what was actually dispensed (not what was merely queued).
 //
-// ESP32 should POST to this endpoint after receiving "FEED_COMPLETE:XX.Xg" from Arduino.
-// Add to ESP32 firmware inside the Serial2 FEED_COMPLETE handler:
-//
-//   HTTPClient http;
-//   http.begin(feedCompleteUrl);   // "http://192.168.0.37/IntelliFeed/api/log_feed_complete.php"
-//   http.addHeader("Content-Type", "application/json");
-//   StaticJsonDocument<128> doc;
-//   doc["device_id"]  = "esp32_main";
-//   doc["dispensed_g"]= dispensed;
-//   doc["plate_type"] = lastPlateType;   // store the last plate type used
-//   String body; serializeJson(doc, body);
-//   http.POST(body);
-//   http.end();
+// POST JSON: { "device_id": "esp32_main", "dispensed_g": 28.4, "command_id": 123 }
+// command_id = id from get_feeding_command.php, or 0 for a physical-button feed.
 
 require_once 'db_connect.php';
 
@@ -23,46 +13,65 @@ header('Content-Type: application/json');
 ini_set('display_errors', 0);
 error_reporting(0);
 
-$input = file_get_contents('php://input');
-$data  = json_decode($input, true);
+$data = json_decode(file_get_contents('php://input'), true);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$data) {
-    echo json_encode(['error' => 'Invalid request']);
+    echo json_encode(['success' => false, 'error' => 'Invalid request']);
     exit;
 }
 
-$deviceId   =       ($data['device_id']   ?? 'esp32_main');
-$dispensed  = (float)($data['dispensed_g'] ?? 0);
-$plateType  =       ($data['plate_type']   ?? 'stock');
+$deviceId  =        ($data['device_id']   ?? 'esp32_main');
+$dispensed = (float)($data['dispensed_g'] ?? 0);
+$commandId = (int)  ($data['command_id']  ?? 0);
 
-if ($dispensed <= 0) {
-    echo json_encode(['error' => 'Invalid dispensed weight']);
+if ($dispensed <= 0 || $dispensed > 2000) {
+    echo json_encode(['success' => false, 'error' => 'Invalid dispensed weight']);
     exit;
 }
 
 try {
-    // Find the most recent executed feeding command for this device
-    // to get the user_id (ESP32 doesn't have a session)
-    $cmdStmt = $pdo->prepare("
-        SELECT user_id FROM feeding_commands
-        WHERE device_id = ? AND executed = 1
-        ORDER BY executed_at DESC
-        LIMIT 1
-    ");
-    $cmdStmt->execute([$deviceId]);
-    $cmd = $cmdStmt->fetch(PDO::FETCH_ASSOC);
-    $userId = $cmd ? (int)$cmd['user_id'] : 1;  // fallback to user 1 if not found
+    $cmd = false;
+    if ($commandId > 0) {
+        $stmt = $pdo->prepare("
+            SELECT user_id, plate_type, is_scheduled
+            FROM feeding_commands
+            WHERE id = ? AND command = 'feed_now'
+        ");
+        $stmt->execute([$commandId]);
+        $cmd = $stmt->fetch();
+    }
+
+    if ($cmd) {
+        $userId    = (int)$cmd['user_id'];
+        $plateType = $cmd['plate_type'];
+        $source    = $cmd['is_scheduled'] ? 'schedule' : 'manual';
+    } else {
+        // Physical button: no command row. Credit the feeder's most recent user.
+        $last = $pdo->query("
+            SELECT user_id FROM feeding_commands
+            WHERE user_id > 0 ORDER BY id DESC LIMIT 1
+        ")->fetch();
+        if (!$last) {
+            $last = $pdo->query("SELECT id AS user_id FROM users ORDER BY id ASC LIMIT 1")->fetch();
+        }
+        $userId    = $last ? (int)$last['user_id'] : 0;
+        $plateType = 'stock';
+        $source    = 'button';
+    }
 
     $pdo->prepare("
-        INSERT INTO feeding_history
-            (user_id, device_id, plate_type, `portion`)
-        VALUES
-            (?, ?, ?, ?)
-    ")->execute([$userId, $deviceId, $plateType, $dispensed]);
+        INSERT INTO feeding_history (user_id, device_id, plate_type, `portion`, source)
+        VALUES (?, ?, ?, ?, ?)
+    ")->execute([$userId, $deviceId, $plateType, $dispensed, $source]);
 
-    echo json_encode(['success' => true, 'logged_grams' => $dispensed]);
+    echo json_encode([
+        'success'      => true,
+        'logged_grams' => $dispensed,
+        'source'       => $source,
+        'history_id'   => (int)$pdo->lastInsertId()
+    ]);
 
 } catch (PDOException $e) {
-    echo json_encode(['error' => $e->getMessage()]);
+    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 ?>

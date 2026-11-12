@@ -57,7 +57,7 @@ try {
             'command'    => $command['command'],
             'plate_type' => $command['plate_type'] ?? 'stock',
             'portion'    => (float)($command['portion'] ?? 30),
-            'command_id' => $command['id'],
+            'command_id' => (int)$command['id'],
             'timestamp'  => $command['created_at']
         ]);
     } else {

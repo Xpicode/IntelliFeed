@@ -59,8 +59,8 @@ try {
         // ── FEED command — isusunod pagkatapos ng dispose ──
         $pdo->prepare("
             INSERT INTO feeding_commands
-                (user_id, device_id, command, plate_type, `portion`, executed)
-            VALUES (?, 'esp32_main', 'feed_now', ?, ?, 0)
+                (user_id, device_id, command, plate_type, `portion`, is_scheduled, executed)
+            VALUES (?, 'esp32_main', 'feed_now', ?, ?, 1, 0)
         ")->execute([
             $schedule['user_id'],
             $schedule['plate_type'],

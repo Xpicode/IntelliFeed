@@ -2686,14 +2686,15 @@ function loadFeedingHistory(filter = 'today') {
         if (data.success) { 
             let html = `<div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;"><div class="stat-pill">📊 Total: ${data.stats.total_feedings || 0}</div><div class="stat-pill">🍖 Food: ${(data.stats.total_grams || 0).toFixed(0)}g</div><div class="stat-pill">📈 Avg: ${(data.stats.avg_portion || 0).toFixed(0)}g</div></div>`; 
             if (data.history && data.history.length > 0) { 
-                html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.75rem;"><thead><tr style="border-bottom:1px solid var(--card-border);"><th style="padding:8px;text-align:left;">Date & Time</th><th style="padding:8px;text-align:left;">Type</th><th style="padding:8px;text-align:left;">Portion</th><th style="padding:8px;text-align:left;">Eaten</th></tr></thead><tbody>`; 
+                html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.75rem;"><thead><tr style="border-bottom:1px solid var(--card-border);"><th style="padding:8px;text-align:left;">Date & Time</th><th style="padding:8px;text-align:left;">Type</th><th style="padding:8px;text-align:left;">Source</th><th style="padding:8px;text-align:left;">Portion</th><th style="padding:8px;text-align:left;">Eaten</th></tr></thead><tbody>`; 
                 data.history.forEach(record => { 
                     const dateStr = new Date(record.created_at).toLocaleString(); 
                     const icon = record.plate_type === 'new' ? '🍽️' : '🫙'; 
+                    const sourceLabel = ({ manual: 'Manual', schedule: 'Schedule', button: 'Button', simulated: 'Simulated' })[record.source] || 'Manual'; 
                     const consumed = record.weight_final ? (record.portion - record.weight_final).toFixed(1) : record.portion; 
-                    html += `<tr><td style="padding:6px;">${dateStr}</td><td style="padding:6px;">${icon}</td><td style="padding:6px;"><span class="portion-badge">${record.portion}g</span></td><td style="padding:6px;">${consumed > 0 ? '▼ '+consumed+'g' : '0g'}</td></tr>`; 
+                    html += `<tr><td style="padding:6px;">${dateStr}</td><td style="padding:6px;">${icon}</td><td style="padding:6px;">${sourceLabel}</td><td style="padding:6px;"><span class="portion-badge">${record.portion}g</span></td><td style="padding:6px;">${consumed > 0 ? '▼ '+consumed+'g' : '0g'}</td></tr>`; 
                 }); 
-                html += `</tbody>}</div>`; 
+                html += `</tbody></table></div>`; 
             } else { 
                 html += `<div class="empty-feedings">🍽️ No feeding records found</div>`; 
             } 

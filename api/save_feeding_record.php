@@ -64,18 +64,6 @@ if (!in_array($plateType, ['stock', 'new'])) {
 }
 
 try {
-    // Ensure table exists
-    $pdo->exec("CREATE TABLE IF NOT EXISTS feeding_history (
-        id           INT AUTO_INCREMENT PRIMARY KEY,
-        user_id      INT NOT NULL,
-        device_id    VARCHAR(50) DEFAULT 'esp32_main',
-        plate_type   VARCHAR(20) DEFAULT 'stock',
-        portion      FLOAT DEFAULT 0,
-        weight_final FLOAT DEFAULT NULL,
-        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_user_date (user_id, created_at)
-    )");
-
     if ($action === 'save') {
         if ($portion <= 0) {
             debugLog("ERROR: Invalid portion=$portion");
@@ -85,8 +73,8 @@ try {
 
         $stmt = $pdo->prepare("
             INSERT INTO feeding_history
-                (user_id, device_id, plate_type, portion, weight_final, created_at)
-            VALUES (?, ?, ?, ?, ?, NOW())
+                (user_id, device_id, plate_type, `portion`, weight_final, source, created_at)
+            VALUES (?, ?, ?, ?, ?, 'simulated', NOW())
         ");
         $result = $stmt->execute([$userId, $deviceId, $plateType, $portion, $weightFinal]);
 

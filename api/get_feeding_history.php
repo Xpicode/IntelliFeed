@@ -16,20 +16,8 @@ $userId = $_SESSION['user_id'];
 $range  = isset($_GET['range']) ? $_GET['range'] : 'all';
 
 try {
-    // ── Ensure table exists ───────────────────────────────
-    $pdo->exec("CREATE TABLE IF NOT EXISTS feeding_history (
-        id           INT AUTO_INCREMENT PRIMARY KEY,
-        user_id      INT NOT NULL,
-        device_id    VARCHAR(50) DEFAULT 'esp32_main',
-        plate_type   VARCHAR(20) DEFAULT 'stock',
-        portion      FLOAT DEFAULT 0,
-        weight_final FLOAT DEFAULT NULL,
-        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_user_date (user_id, created_at)
-    )");
-
     // ── Build query ───────────────────────────────────────
-    $sql    = "SELECT id, user_id, device_id, plate_type, portion, weight_final, created_at
+    $sql    = "SELECT id, user_id, device_id, plate_type, `portion`, weight_final, source, created_at
                FROM feeding_history
                WHERE user_id = ?";
     $params = [$userId];
